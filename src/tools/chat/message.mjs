@@ -43,9 +43,9 @@ export default [
           type: "string",
           description: "@指定 userId 列表（逗号分隔，仅群聊）。需在 text 中包含 <@userId>。",
         },
-        at_open_dingtalk_ids: {
+        at_mobiles: {
           type: "string",
-          description: "@指定 openDingTalkId 列表（逗号分隔，仅群聊，用于外部成员）。需在 text 中包含对应标记。",
+          description: "@指定手机号列表（逗号分隔，仅群聊，用于外部成员无 userId 时按手机号 @）。",
         },
       },
       required: ["title", "text"],
@@ -66,7 +66,7 @@ export default [
         ["--text", a.text],
         a.at_all ? ["--at-all"] : null,
         ["--at-users", a.at_users],
-        ["--at-open-dingtalk-ids", a.at_open_dingtalk_ids],
+        ["--at-mobiles", a.at_mobiles],
       ];
     },
   },
