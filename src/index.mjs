@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * quick-dingtalk-mcp v0.5
+ * quick-dingtalk-mcp v0.6
  *
  * 模块化 MCP Server，自动发现并注册所有 tool 定义。
  * 入口只负责启动 server 和路由请求，业务逻辑全在 src/tools/ 中。
@@ -19,7 +19,7 @@ import { errorResult, formatError } from "./framework/helpers.mjs";
 const { mcpTools, handlers } = await loadAllTools();
 
 const server = new Server(
-  { name: "quick-dingtalk-mcp", version: "0.5.0" },
+  { name: "quick-dingtalk-mcp", version: "0.6.0" },
   { capabilities: { tools: {} } }
 );
 
