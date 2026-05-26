@@ -70,18 +70,23 @@ export default [
   // ─── 列出群成员 ────────────────────────────────────
   {
     name: "dingtalk_list_group_members",
-    description: "列出群聊所有成员。底层调用 dws chat group members list。",
+    description:
+      "列出群聊所有成员。内部成员返回 userId，外部成员返回 openDingTalkId（因隐私保护不暴露 userId）。底层调用 dws chat group members list。",
     annotations: READ_ONLY,
     inputSchema: {
       type: "object",
       properties: {
         chat_id: { type: "string", description: "群聊 openConversationId（必填）" },
+        cursor: { type: "string", description: "分页游标（首页留空）" },
       },
       required: ["chat_id"],
     },
     command: ["chat", "group", "members", "list"],
     args(a) {
-      return [["--group", a.chat_id]];
+      return [
+        ["--id", a.chat_id],
+        ["--cursor", a.cursor],
+      ];
     },
   },
 
