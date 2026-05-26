@@ -1,6 +1,6 @@
 /**
  * 知识库 tools
- * 对应 dws wiki 子命令树
+ * 对应 dws wiki space 子命令树
  */
 import { READ_ONLY, WRITE_ADDITIVE, WRITE_IDEMPOTENT } from "../../framework/annotations.mjs";
 
@@ -9,7 +9,7 @@ export default [
   {
     name: "dingtalk_wiki_create",
     description:
-      "创建知识库。底层调用 dws wiki create。",
+      "创建知识库。底层调用 dws wiki space create。",
     annotations: WRITE_ADDITIVE,
     inputSchema: {
       type: "object",
@@ -19,7 +19,7 @@ export default [
       },
       required: ["name"],
     },
-    command: ["wiki", "create"],
+    command: ["wiki", "space", "create"],
     args(a) {
       return [
         ["--name", a.name],
@@ -32,7 +32,7 @@ export default [
   {
     name: "dingtalk_wiki_get",
     description:
-      "查看知识库详情。底层调用 dws wiki get。",
+      "查看知识库详情。底层调用 dws wiki space get。",
     annotations: READ_ONLY,
     inputSchema: {
       type: "object",
@@ -41,7 +41,7 @@ export default [
       },
       required: ["id"],
     },
-    command: ["wiki", "get"],
+    command: ["wiki", "space", "get"],
     args(a) {
       return [["--id", a.id]];
     },
@@ -51,13 +51,13 @@ export default [
   {
     name: "dingtalk_wiki_list",
     description:
-      "列出用户可访问的知识库列表。底层调用 dws wiki list。",
+      "列出用户可访问的知识库列表。底层调用 dws wiki space list。",
     annotations: READ_ONLY,
     inputSchema: {
       type: "object",
       properties: {},
     },
-    command: ["wiki", "list"],
+    command: ["wiki", "space", "list"],
     args() {
       return [];
     },
@@ -67,7 +67,7 @@ export default [
   {
     name: "dingtalk_wiki_search",
     description:
-      "搜索知识库。底层调用 dws wiki search。",
+      "搜索知识库。底层调用 dws wiki space search。",
     annotations: READ_ONLY,
     inputSchema: {
       type: "object",
@@ -76,7 +76,7 @@ export default [
       },
       required: ["keyword"],
     },
-    command: ["wiki", "search"],
+    command: ["wiki", "space", "search"],
     args(a) {
       return [["--keyword", a.keyword]];
     },
