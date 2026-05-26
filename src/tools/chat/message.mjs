@@ -358,13 +358,13 @@ export default [
   // ─── 按发送者筛选消息 ──────────────────────────────
   {
     name: "dingtalk_list_by_sender",
-    description: "按发送者拉取消息（含单聊/群聊）。底层调用 dws chat message list-by-sender。",
+    description: "按发送者拉取消息。底层调用 dws chat message list-by-sender。通过 sender_user_id 或 sender_open_dingtalk_id 指定发送者。",
     annotations: READ_ONLY,
     inputSchema: {
       type: "object",
       properties: {
-        chat_id: { type: "string", description: "群聊 openConversationId（群聊/单聊二选一）" },
-        sender_id: { type: "string", description: "发送者标识" },
+        sender_user_id: { type: "string", description: "发送者 userId（内部成员）。与 sender_open_dingtalk_id 二选一。" },
+        sender_open_dingtalk_id: { type: "string", description: "发送者 openDingTalkId（外部成员）。与 sender_user_id 二选一。" },
         start: { type: "string", description: "开始时间" },
         end: { type: "string", description: "结束时间" },
         limit: { type: "number", description: "每页返回数量" },
@@ -372,10 +372,16 @@ export default [
       },
     },
     command: ["chat", "message", "list-by-sender"],
+    validate(a) {
+      const targets = [a.sender_user_id, a.sender_open_dingtalk_id].filter(Boolean);
+      if (targets.length !== 1) {
+        throw new InputError("sender_user_id / sender_open_dingtalk_id 必须恰好提供一个");
+      }
+    },
     args(a) {
       return [
-        ["--group", a.chat_id],
-        ["--sender", a.sender_id],
+        ["--sender-user-id", a.sender_user_id],
+        ["--sender-open-dingtalk-id", a.sender_open_dingtalk_id],
         ["--start", a.start],
         ["--end", a.end],
         ["--limit", a.limit != null ? String(a.limit) : undefined],
