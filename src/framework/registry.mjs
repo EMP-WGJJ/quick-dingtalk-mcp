@@ -4,7 +4,7 @@
  */
 import { readdir } from "node:fs/promises";
 import { join, resolve } from "node:path";
-import { fileURLToPath } from "node:url";
+import { fileURLToPath, pathToFileURL } from "node:url";
 
 const __dirname = fileURLToPath(new URL(".", import.meta.url));
 const TOOLS_DIR = resolve(__dirname, "../tools");
@@ -19,7 +19,7 @@ export async function loadAllTools() {
 
   const modules = await discoverModules(TOOLS_DIR);
   for (const modulePath of modules) {
-    const mod = await import(modulePath);
+    const mod = await import(pathToFileURL(modulePath).href);
     const tools = mod.default;
     if (!Array.isArray(tools)) continue;
 
