@@ -38,7 +38,7 @@ export default [
       type: "object",
       properties: {
         user: { type: "string", description: "用户 userId（必填）" },
-        date: { type: "string", description: "日期 YYYY-MM-DD（必填）" },
+        date: { type: "string", description: "日期，格式 yyyy-MM-dd HH:mm:ss（必填）" },
         stats_type: { type: "string", description: "统计类型：week 或 month（必填）" },
       },
       required: ["user", "date", "stats_type"],
