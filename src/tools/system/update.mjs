@@ -21,6 +21,7 @@ const __dirname = dirname(fileURLToPath(import.meta.url));
 const PROJECT_ROOT = resolve(__dirname, "../..", "..");
 const SCRIPTS_DIR = resolve(PROJECT_ROOT, "scripts");
 const UPDATE_TIMEOUT_MS = 120_000; // 更新超时 2 分钟
+const UPDATE_BRANCH = "safe-mode"; // 固定从此分支拉取更新
 
 /**
  * 检测当前操作系统并返回对应的更新脚本路径和执行命令
@@ -66,9 +67,10 @@ async function getVersionInfo() {
       branch: branch.trim(),
       commit: commit.trim(),
       recentCommits: log.trim(),
+      updateBranch: UPDATE_BRANCH,
     };
   } catch {
-    return { branch: "unknown", commit: "unknown", recentCommits: "" };
+    return { branch: "unknown", commit: "unknown", recentCommits: "", updateBranch: UPDATE_BRANCH };
   }
 }
 
@@ -91,17 +93,17 @@ export default [
     async execute() {
       const versionInfo = await getVersionInfo();
 
-      // 检查远程是否有更新
+      // 检查远程是否有更新（固定对比 origin/safe-mode）
       let updateAvailable = "unknown";
       let behindCount = 0;
       try {
-        await execFileAsync("git", ["fetch", "origin", "--dry-run"], {
+        await execFileAsync("git", ["fetch", "origin", UPDATE_BRANCH], {
           cwd: PROJECT_ROOT,
           timeout: 15000,
         });
         const { stdout } = await execFileAsync(
           "git",
-          ["rev-list", "--count", `HEAD..origin/${versionInfo.branch}`],
+          ["rev-list", "--count", `HEAD..origin/${UPDATE_BRANCH}`],
           { cwd: PROJECT_ROOT, timeout: 5000 }
         );
         behindCount = parseInt(stdout.trim(), 10) || 0;
@@ -113,13 +115,14 @@ export default [
       const lines = [
         `## quick-dingtalk-mcp Version Info`,
         ``,
-        `- Branch: ${versionInfo.branch}`,
+        `- Current branch: ${versionInfo.branch}`,
+        `- Update branch: ${UPDATE_BRANCH}`,
         `- Current commit: ${versionInfo.commit}`,
         ``,
         `### Recent commits:`,
         versionInfo.recentCommits,
         ``,
-        `### Update available: ${updateAvailable === "yes" ? `YES (${behindCount} commits behind)` : updateAvailable === "no" ? "NO (already up-to-date)" : "CHECK FAILED (network issue?)"}`,
+        `### Update available: ${updateAvailable === "yes" ? `YES (${behindCount} commits behind origin/${UPDATE_BRANCH})` : updateAvailable === "no" ? "NO (already up-to-date)" : "CHECK FAILED (network issue?)"}`,
       ];
 
       if (updateAvailable === "yes") {

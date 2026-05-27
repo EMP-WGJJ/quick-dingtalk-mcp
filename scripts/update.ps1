@@ -53,6 +53,9 @@ if ($Help) {
     exit 0
 }
 
+# ─── 固定更新分支 ───────────────────────────────────────────────────
+$UpdateBranch = "safe-mode"
+
 # ─── 定位项目根目录 ─────────────────────────────────────────────────
 $ScriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
 $ProjectDir = Split-Path -Parent $ScriptDir
@@ -62,6 +65,7 @@ if (-not $Json) {
     Write-Host ""
     Write-Info "quick-dingtalk-mcp update starting"
     Write-Host "   Project path: $ProjectDir"
+    Write-Host "   Update branch: $UpdateBranch"
     Write-Host ""
 }
 
@@ -76,7 +80,8 @@ $CurrentCommit = git rev-parse --short HEAD 2>$null
 if (-not $CurrentCommit) { $CurrentCommit = "unknown" }
 
 if (-not $Json) {
-    Write-Host "   Branch: $CurrentBranch"
+    Write-Host "   Current branch: $CurrentBranch"
+    Write-Host "   Target branch: $UpdateBranch"
     Write-Host "   Commit: $CurrentCommit"
 }
 
@@ -86,9 +91,9 @@ if (-not $Json) {
 if (-not $Json) { Write-Info "Step 2: Pulling latest code" }
 
 if ($Force) {
-    if (-not $Json) { Write-Warn "Force mode: resetting to remote latest" }
+    if (-not $Json) { Write-Warn "Force mode: resetting to origin/$UpdateBranch" }
     git fetch origin 2>$null
-    git reset --hard "origin/$CurrentBranch"
+    git reset --hard "origin/$UpdateBranch"
 } else {
     # 检查本地修改
     $diffStatus = git status --porcelain 2>$null
@@ -100,10 +105,10 @@ if ($Force) {
         $Stashed = $true
     }
 
-    # 拉取
-    $pullResult = git pull origin $CurrentBranch 2>&1
+    # 从固定分支拉取（不切换当前分支）
+    $pullResult = git pull origin $UpdateBranch 2>&1
     if ($LASTEXITCODE -eq 0) {
-        if (-not $Json) { Write-OK "Code pulled successfully" }
+        if (-not $Json) { Write-OK "Code pulled from origin/$UpdateBranch successfully" }
     } else {
         if (-not $Json) { Write-Err "Pull failed (possible conflict), try -Force option" }
         if ($Stashed) {
@@ -185,7 +190,7 @@ if ($Json) {
 {
   "success": true,
   "updated": $Updated,
-  "branch": "$CurrentBranch",
+  "update_branch": "$UpdateBranch",
   "previous_commit": "$CurrentCommit",
   "current_commit": "$NewCommit",
   "dws_upgraded": "$DwsUpgraded",
@@ -202,7 +207,7 @@ Write-Host "━━━━━━━━━━━━━━━━━━━━━━�
 Write-Host "  ✅ Update complete" -ForegroundColor Green
 Write-Host "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━" -ForegroundColor Green
 Write-Host ""
-Write-Host "   Branch:  $CurrentBranch"
+Write-Host "   Update from:  origin/$UpdateBranch"
 Write-Host "   Commit:  $CurrentCommit → $NewCommit"
 
 if ($CurrentCommit -eq $NewCommit) {
