@@ -23,6 +23,11 @@ const MAX_BUFFER = 5 * 1024 * 1024;
  * @returns MCP CallToolResult
  */
 export async function executeTool(tool, inputArgs) {
+  // 0. 自定义执行器（不走 dws CLI，如 system/update）
+  if (tool._customExecutor && typeof tool.execute === "function") {
+    return await tool.execute(inputArgs);
+  }
+
   // 1. 可选自定义校验
   if (tool.validate) {
     tool.validate(inputArgs);
