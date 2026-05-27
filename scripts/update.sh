@@ -58,6 +58,9 @@ while [[ $# -gt 0 ]]; do
     esac
 done
 
+# ─── 固定更新分支 ───────────────────────────────────────────────────
+UPDATE_BRANCH="safe-mode"
+
 # ─── 定位项目根目录 ─────────────────────────────────────────────────
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 PROJECT_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
@@ -66,6 +69,7 @@ cd "$PROJECT_DIR"
 echo ""
 info "quick-dingtalk-mcp update starting"
 echo "   Project path: $PROJECT_DIR"
+echo "   Update branch: $UPDATE_BRANCH"
 echo ""
 
 # ═══════════════════════════════════════════════════════════════════════
@@ -75,7 +79,8 @@ info "Step 1: Checking current state"
 
 CURRENT_BRANCH=$(git rev-parse --abbrev-ref HEAD 2>/dev/null || echo "unknown")
 CURRENT_COMMIT=$(git rev-parse --short HEAD 2>/dev/null || echo "unknown")
-echo "   Branch: $CURRENT_BRANCH"
+echo "   Current branch: $CURRENT_BRANCH"
+echo "   Target branch: $UPDATE_BRANCH"
 echo "   Commit: $CURRENT_COMMIT"
 
 # ═══════════════════════════════════════════════════════════════════════
@@ -84,9 +89,9 @@ echo "   Commit: $CURRENT_COMMIT"
 info "Step 2: Pulling latest code"
 
 if [ "$FORCE" = true ]; then
-    warn "Force mode: resetting to remote latest"
+    warn "Force mode: resetting to origin/$UPDATE_BRANCH"
     git fetch origin
-    git reset --hard "origin/$CURRENT_BRANCH"
+    git reset --hard "origin/$UPDATE_BRANCH"
 else
     # 检查是否有未提交的修改
     if ! git diff --quiet 2>/dev/null || ! git diff --cached --quiet 2>/dev/null; then
@@ -97,9 +102,9 @@ else
         STASHED=false
     fi
 
-    # 拉取
-    if git pull origin "$CURRENT_BRANCH" 2>/dev/null; then
-        ok "Code pulled successfully"
+    # 从固定分支拉取（不切换当前分支）
+    if git pull origin "$UPDATE_BRANCH" 2>/dev/null; then
+        ok "Code pulled from origin/$UPDATE_BRANCH successfully"
     else
         err "Pull failed (possible conflict), try --force option"
         if [ "$STASHED" = true ]; then
@@ -170,7 +175,7 @@ if [ "$JSON_OUTPUT" = true ]; then
 {
   "success": true,
   "updated": $UPDATED,
-  "branch": "$CURRENT_BRANCH",
+  "update_branch": "$UPDATE_BRANCH",
   "previous_commit": "$CURRENT_COMMIT",
   "current_commit": "$NEW_COMMIT",
   "dws_upgraded": "$DWS_UPGRADED",
@@ -186,7 +191,7 @@ echo -e "${GREEN}━━━━━━━━━━━━━━━━━━━━━
 echo -e "${GREEN}  ✅ Update complete${NC}"
 echo -e "${GREEN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
 echo ""
-echo "   Branch:  $CURRENT_BRANCH"
+echo "   Update from:  origin/$UPDATE_BRANCH"
 echo "   Commit:  $CURRENT_COMMIT → $NEW_COMMIT"
 
 if [ "$CURRENT_COMMIT" = "$NEW_COMMIT" ]; then
