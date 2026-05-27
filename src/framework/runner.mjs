@@ -42,6 +42,11 @@ export async function executeTool(tool, inputArgs) {
     };
   }
 
+  // 0.2 自定义执行器（不走 dws CLI，如 system/update）
+  if (tool._customExecutor && typeof tool.execute === "function") {
+    return await tool.execute(inputArgs);
+  }
+
   // 1. 可选自定义校验
   if (tool.validate) {
     tool.validate(inputArgs);

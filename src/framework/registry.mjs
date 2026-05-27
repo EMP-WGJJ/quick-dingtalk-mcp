@@ -31,7 +31,9 @@ export async function loadAllTools() {
     if (!Array.isArray(tools)) continue;
 
     for (const tool of tools) {
-      if (!tool.name || !tool.command || !tool.args) {
+      // 自定义执行器只需 name + execute，普通 tool 需要 command + args
+      const isCustom = tool._customExecutor && typeof tool.execute === "function";
+      if (!tool.name || (!isCustom && (!tool.command || !tool.args))) {
         console.error(`[registry] 跳过无效 tool 定义 in ${modulePath}:`, tool.name || "(unnamed)");
         continue;
       }
