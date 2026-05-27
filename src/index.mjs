@@ -17,6 +17,7 @@ import {
 import { loadAllTools } from "./framework/registry.mjs";
 import { executeTool } from "./framework/runner.mjs";
 import { errorResult, formatError } from "./framework/helpers.mjs";
+import { getDangerousToolGuidance } from "./framework/safety-guidance.mjs";
 
 // 加载所有 tool 定义
 const { mcpTools, handlers } = await loadAllTools();
@@ -36,6 +37,11 @@ server.setRequestHandler(CallToolRequestSchema, async (req) => {
   const { name, arguments: args = {} } = req.params;
   const tool = handlers.get(name);
   if (!tool) {
+    // 检查是否是被移除的危险操作，提供友好引导
+    const guidance = getDangerousToolGuidance(name);
+    if (guidance) {
+      return { content: [{ type: "text", text: guidance }], isError: true };
+    }
     return errorResult(`未知工具: ${name}`);
   }
   try {

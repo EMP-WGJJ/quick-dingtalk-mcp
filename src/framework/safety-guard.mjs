@@ -124,7 +124,12 @@ function checkAtAll(tool, args) {
   if (tool.name === "dingtalk_send_message" && args.at_all) {
     return {
       allowed: false,
-      reason: "🚫 安全限制：禁止 @所有人。如需允许，请设置环境变量 SAFETY_ALLOW_AT_ALL=true",
+      reason:
+        "🚫 安全提示：「@所有人」不支持通过 AI 执行\n\n" +
+        "📱 请手动操作：\n" +
+        "   在钉钉 App 中打开群聊 → 输入框中 @所有人 → 发送\n\n" +
+        "💡 原因：@所有人 会打扰群内全部成员，为避免误操作已禁用。\n" +
+        "   如确需允许，请设置环境变量 SAFETY_ALLOW_AT_ALL=true",
     };
   }
 
@@ -174,9 +179,10 @@ function checkWorkHours(tool) {
     return {
       allowed: false,
       reason:
-        `🚫 时间保护：当前为非工作时间（${String(localHour).padStart(2, "0")}:00），` +
-        `消息发送仅允许在 ${WORK_HOURS.start}:00-${WORK_HOURS.end}:00 之间。` +
-        `如需调整，请设置环境变量 SAFETY_WORK_HOURS=${WORK_HOURS.start}-${WORK_HOURS.end}`,
+        `🚫 时间保护：当前为非工作时间（${String(localHour).padStart(2, "0")}:00）\n\n` +
+        `📱 消息发送仅允许在 ${WORK_HOURS.start}:00-${WORK_HOURS.end}:00 之间。\n\n` +
+        `💡 如需在非工作时间发送，请在钉钉 App 中手动操作，避免打扰他人。\n` +
+        `   或设置环境变量 SAFETY_WORK_HOURS=0-24 取消时间限制。`,
     };
   }
 
