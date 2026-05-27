@@ -1,22 +1,34 @@
 <#
 .SYNOPSIS
-    quick-dingtalk-mcp 更新脚本 (Windows PowerShell)
+    quick-dingtalk-mcp Update Script (Windows PowerShell)
 .DESCRIPTION
-    自动完成以下步骤:
-    1. 拉取远程最新代码（当前分支）
-    2. 安装/更新项目依赖
-    3. 升级 dws CLI（可选）
-    4. 输出更新结果摘要
+    This script is called by the MCP tool (dingtalk_self_update) or can
+    be run manually. It performs:
+    1. Record current version
+    2. Pull latest code from remote
+    3. Install/update npm dependencies
+    4. Optionally upgrade dws CLI
+    5. Output update summary
+.PARAMETER UpgradeDws
+    Also upgrade dws CLI
+.PARAMETER Force
+    Force reset to remote latest (discard local changes)
+.PARAMETER Json
+    Output result in JSON format (for MCP integration)
+.PARAMETER Help
+    Show help
 .NOTES
-    用法:
+    Usage:
       powershell -ExecutionPolicy Bypass -File scripts/update.ps1
       powershell -ExecutionPolicy Bypass -File scripts/update.ps1 -UpgradeDws
       powershell -ExecutionPolicy Bypass -File scripts/update.ps1 -Force
+      powershell -ExecutionPolicy Bypass -File scripts/update.ps1 -Json
 #>
 
 param(
     [switch]$UpgradeDws,
     [switch]$Force,
+    [switch]$Json,
     [switch]$Help
 )
 
@@ -31,12 +43,13 @@ function Write-Info { param($msg) Write-Host "  → $msg" -ForegroundColor Cyan 
 
 # ─── 帮助 ───────────────────────────────────────────────────────────
 if ($Help) {
-    Write-Host "用法: powershell -File scripts/update.ps1 [选项]"
+    Write-Host "Usage: powershell -File scripts/update.ps1 [options]"
     Write-Host ""
-    Write-Host "选项:"
-    Write-Host "  -UpgradeDws   同时升级 dws CLI"
-    Write-Host "  -Force        强制重置到远程最新（丢弃本地修改）"
-    Write-Host "  -Help         显示帮助"
+    Write-Host "Options:"
+    Write-Host "  -UpgradeDws   Also upgrade dws CLI"
+    Write-Host "  -Force        Force reset to remote latest (discard local changes)"
+    Write-Host "  -Json         Output result in JSON format (for MCP integration)"
+    Write-Host "  -Help         Show help"
     exit 0
 }
 
@@ -45,31 +58,35 @@ $ScriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
 $ProjectDir = Split-Path -Parent $ScriptDir
 Set-Location $ProjectDir
 
-Write-Host ""
-Write-Info "quick-dingtalk-mcp 更新开始"
-Write-Host "   项目路径: $ProjectDir"
-Write-Host ""
+if (-not $Json) {
+    Write-Host ""
+    Write-Info "quick-dingtalk-mcp update starting"
+    Write-Host "   Project path: $ProjectDir"
+    Write-Host ""
+}
 
 # ═══════════════════════════════════════════════════════════════════════
 # Step 1: 记录当前版本
 # ═══════════════════════════════════════════════════════════════════════
-Write-Info "Step 1: 检查当前状态"
+if (-not $Json) { Write-Info "Step 1: Checking current state" }
 
 $CurrentBranch = git rev-parse --abbrev-ref HEAD 2>$null
 if (-not $CurrentBranch) { $CurrentBranch = "unknown" }
 $CurrentCommit = git rev-parse --short HEAD 2>$null
 if (-not $CurrentCommit) { $CurrentCommit = "unknown" }
 
-Write-Host "   当前分支: $CurrentBranch"
-Write-Host "   当前提交: $CurrentCommit"
+if (-not $Json) {
+    Write-Host "   Branch: $CurrentBranch"
+    Write-Host "   Commit: $CurrentCommit"
+}
 
 # ═══════════════════════════════════════════════════════════════════════
 # Step 2: 拉取最新代码
 # ═══════════════════════════════════════════════════════════════════════
-Write-Info "Step 2: 拉取最新代码"
+if (-not $Json) { Write-Info "Step 2: Pulling latest code" }
 
 if ($Force) {
-    Write-Warn "强制模式：重置到远程最新状态"
+    if (-not $Json) { Write-Warn "Force mode: resetting to remote latest" }
     git fetch origin 2>$null
     git reset --hard "origin/$CurrentBranch"
 } else {
@@ -78,7 +95,7 @@ if ($Force) {
     $Stashed = $false
 
     if ($diffStatus) {
-        Write-Warn "检测到本地未提交的修改，暂存中..."
+        if (-not $Json) { Write-Warn "Local uncommitted changes detected, stashing..." }
         git stash push -m "auto-stash before update $(Get-Date -Format 'yyyyMMdd-HHmmss')"
         $Stashed = $true
     }
@@ -86,11 +103,14 @@ if ($Force) {
     # 拉取
     $pullResult = git pull origin $CurrentBranch 2>&1
     if ($LASTEXITCODE -eq 0) {
-        Write-OK "代码拉取成功"
+        if (-not $Json) { Write-OK "Code pulled successfully" }
     } else {
-        Write-Err "代码拉取失败（可能有冲突），尝试 -Force 参数"
+        if (-not $Json) { Write-Err "Pull failed (possible conflict), try -Force option" }
         if ($Stashed) {
             git stash pop 2>$null
+        }
+        if ($Json) {
+            Write-Output '{"success": false, "error": "git pull failed"}'
         }
         exit 1
     }
@@ -99,9 +119,9 @@ if ($Force) {
     if ($Stashed) {
         $popResult = git stash pop 2>&1
         if ($LASTEXITCODE -eq 0) {
-            Write-OK "本地修改已恢复"
+            if (-not $Json) { Write-OK "Local changes restored" }
         } else {
-            Write-Warn "恢复暂存时有冲突，请手动处理: git stash pop"
+            if (-not $Json) { Write-Warn "Conflict restoring stash, please resolve manually: git stash pop" }
         }
     }
 }
@@ -112,15 +132,18 @@ if (-not $NewCommit) { $NewCommit = "unknown" }
 # ═══════════════════════════════════════════════════════════════════════
 # Step 3: 更新项目依赖
 # ═══════════════════════════════════════════════════════════════════════
-Write-Info "Step 3: 更新项目依赖"
+if (-not $Json) { Write-Info "Step 3: Updating dependencies" }
 
 npm install 2>&1 | Out-Null
 if ($LASTEXITCODE -eq 0) {
-    Write-OK "依赖更新完成"
+    if (-not $Json) { Write-OK "Dependencies updated" }
 } else {
     npm install
     if ($LASTEXITCODE -ne 0) {
-        Write-Err "npm install 失败"
+        if (-not $Json) { Write-Err "npm install failed" }
+        if ($Json) {
+            Write-Output '{"success": false, "error": "npm install failed"}'
+        }
         exit 1
     }
 }
@@ -128,8 +151,9 @@ if ($LASTEXITCODE -eq 0) {
 # ═══════════════════════════════════════════════════════════════════════
 # Step 4: 升级 dws（可选）
 # ═══════════════════════════════════════════════════════════════════════
+$DwsUpgraded = "skipped"
 if ($UpgradeDws) {
-    Write-Info "Step 4: 升级 dws CLI"
+    if (-not $Json) { Write-Info "Step 4: Upgrading dws CLI" }
 
     $dwsCmd = Get-Command dws -ErrorAction SilentlyContinue
     if ($dwsCmd) {
@@ -137,33 +161,56 @@ if ($UpgradeDws) {
         $upgradeResult = dws upgrade 2>&1
         if ($LASTEXITCODE -eq 0) {
             $DwsVerAfter = (dws --version 2>&1) | Select-Object -First 1
-            Write-OK "dws 升级完成: $DwsVerBefore → $DwsVerAfter"
+            if (-not $Json) { Write-OK "dws upgraded: $DwsVerBefore → $DwsVerAfter" }
+            $DwsUpgraded = "$DwsVerBefore → $DwsVerAfter"
         } else {
-            Write-Warn "dws upgrade 失败，尝试 npm 方式..."
+            if (-not $Json) { Write-Warn "dws upgrade failed, trying npm..." }
             npm update -g dingtalk-workspace-cli 2>$null
+            $DwsUpgraded = "fallback_npm"
         }
     } else {
-        Write-Warn "dws 未安装，跳过升级"
+        if (-not $Json) { Write-Warn "dws not installed, skipping upgrade" }
+        $DwsUpgraded = "not_installed"
     }
 }
 
 # ═══════════════════════════════════════════════════════════════════════
 # 输出更新摘要
 # ═══════════════════════════════════════════════════════════════════════
+
+# JSON 输出模式（供 MCP tool 解析）
+if ($Json) {
+    $Updated = if ($CurrentCommit -ne $NewCommit) { "true" } else { "false" }
+    $jsonOutput = @"
+{
+  "success": true,
+  "updated": $Updated,
+  "branch": "$CurrentBranch",
+  "previous_commit": "$CurrentCommit",
+  "current_commit": "$NewCommit",
+  "dws_upgraded": "$DwsUpgraded",
+  "restart_required": true
+}
+"@
+    Write-Output $jsonOutput
+    exit 0
+}
+
+# 人类可读输出
 Write-Host ""
 Write-Host "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━" -ForegroundColor Green
-Write-Host "  ✅ 更新完成" -ForegroundColor Green
+Write-Host "  ✅ Update complete" -ForegroundColor Green
 Write-Host "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━" -ForegroundColor Green
 Write-Host ""
-Write-Host "   分支:  $CurrentBranch"
-Write-Host "   提交:  $CurrentCommit → $NewCommit"
+Write-Host "   Branch:  $CurrentBranch"
+Write-Host "   Commit:  $CurrentCommit → $NewCommit"
 
 if ($CurrentCommit -eq $NewCommit) {
-    Write-Host "   状态:  已是最新版本，无更新"
+    Write-Host "   Status:  Already up-to-date, no changes"
 } else {
-    Write-Host "   状态:  已更新到最新版本"
+    Write-Host "   Status:  Updated to latest version"
     Write-Host ""
-    Write-Host "   更新内容:"
+    Write-Host "   Changes:"
     $logs = git log --oneline "$CurrentCommit..$NewCommit" 2>$null | Select-Object -First 10
     foreach ($line in $logs) {
         Write-Host "     $line"
@@ -171,6 +218,6 @@ if ($CurrentCommit -eq $NewCommit) {
 }
 
 Write-Host ""
-Write-Host "   ⚠ 注意: MCP 服务需要重启才能加载新代码" -ForegroundColor Yellow
-Write-Host "   重启方式: 在 MCP Host 中断开并重新连接"
+Write-Host "   ⚠ Note: MCP server needs restart to load new code" -ForegroundColor Yellow
+Write-Host "   Restart: Disconnect and reconnect in your MCP host"
 Write-Host ""
