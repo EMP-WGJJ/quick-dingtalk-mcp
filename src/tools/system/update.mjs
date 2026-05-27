@@ -1,19 +1,24 @@
 /**
  * 系统自更新 tool
  *
- * 让 AI agent 可以通过文本理解，执行脚本完成 MCP 服务的更新。
+ * 让 AI agent 可以通过 MCP 协议发现并执行 MCP 服务的自我更新。
  * 不走 dws CLI，直接执行本地更新脚本。
+ *
+ * 关键设计：
+ * - tool name 使用 "system_" 前缀，让 agent 更容易识别为系统管理类能力
+ * - description 同时包含中英文关键词，提升 agent 的语义匹配率
+ * - 提供 check_update + self_update 两步式工作流
  */
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 import { resolve, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 import { existsSync } from "node:fs";
-import { WRITE_IDEMPOTENT } from "../../framework/annotations.mjs";
+import { WRITE_IDEMPOTENT, READ_ONLY } from "../../framework/annotations.mjs";
 
 const execFileAsync = promisify(execFile);
 const __dirname = dirname(fileURLToPath(import.meta.url));
-const PROJECT_ROOT = resolve(__dirname, "../..");
+const PROJECT_ROOT = resolve(__dirname, "../..", "..");
 const SCRIPTS_DIR = resolve(PROJECT_ROOT, "scripts");
 const UPDATE_TIMEOUT_MS = 120_000; // 更新超时 2 分钟
 
@@ -22,7 +27,6 @@ const UPDATE_TIMEOUT_MS = 120_000; // 更新超时 2 分钟
  */
 function getUpdateCommand(options = {}) {
   const isWindows = process.platform === "win32";
-  const args = [];
 
   if (isWindows) {
     const script = resolve(SCRIPTS_DIR, "update.ps1");
@@ -73,18 +77,16 @@ export default [
   {
     name: "dingtalk_check_update",
     description:
-      "检查 quick-dingtalk-mcp 是否有可用更新。显示当前版本、分支、最近提交，以及远程是否有新提交。",
-    annotations: {
-      readOnlyHint: true,
-      destructiveHint: false,
-      idempotentHint: true,
-      openWorldHint: false,
-    },
+      "Check if this MCP server (quick-dingtalk-mcp) has available updates. " +
+      "Shows current version, branch, recent commits, and whether remote has new commits. " +
+      "Use this tool when the user asks about version, update status, or wants to know if the server is up-to-date. " +
+      "检查 MCP 服务是否有可用更新，显示当前版本信息。",
+    annotations: READ_ONLY,
     inputSchema: {
       type: "object",
       properties: {},
+      additionalProperties: false,
     },
-    // 自定义执行（不走 dws CLI）
     _customExecutor: true,
     async execute() {
       const versionInfo = await getVersionInfo();
@@ -109,19 +111,23 @@ export default [
       }
 
       const lines = [
-        `quick-dingtalk-mcp 版本信息`,
+        `## quick-dingtalk-mcp Version Info`,
         ``,
-        `分支: ${versionInfo.branch}`,
-        `当前提交: ${versionInfo.commit}`,
+        `- Branch: ${versionInfo.branch}`,
+        `- Current commit: ${versionInfo.commit}`,
         ``,
-        `最近提交:`,
+        `### Recent commits:`,
         versionInfo.recentCommits,
         ``,
-        `有可用更新: ${updateAvailable === "yes" ? `是（落后 ${behindCount} 个提交）` : updateAvailable === "no" ? "否（已是最新）" : "检查失败"}`,
+        `### Update available: ${updateAvailable === "yes" ? `YES (${behindCount} commits behind)` : updateAvailable === "no" ? "NO (already up-to-date)" : "CHECK FAILED (network issue?)"}`,
       ];
 
       if (updateAvailable === "yes") {
-        lines.push(``, `使用 dingtalk_self_update 工具执行更新。`);
+        lines.push(
+          ``,
+          `### Next step:`,
+          `Call the \`dingtalk_self_update\` tool to update to the latest version.`
+        );
       }
 
       return { content: [{ type: "text", text: lines.join("\n") }] };
@@ -132,22 +138,32 @@ export default [
   {
     name: "dingtalk_self_update",
     description:
-      "更新 quick-dingtalk-mcp 到最新版本。执行 git pull + npm install，可选同时升级 dws CLI。更新后需重启 MCP 服务才能加载新代码。",
+      "Update this MCP server (quick-dingtalk-mcp) to the latest version. " +
+      "Performs git pull + npm install to fetch and apply updates. " +
+      "Use this tool when the user asks to update/upgrade the MCP server, or after dingtalk_check_update shows updates are available. " +
+      "The MCP server needs to be restarted after update to load new code. " +
+      "更新 MCP 服务到最新版本（git pull + npm install），更新后需重启服务。",
     annotations: WRITE_IDEMPOTENT,
     inputSchema: {
       type: "object",
       properties: {
         upgrade_dws: {
           type: "boolean",
-          description: "是否同时升级 dws CLI（默认 false）",
+          description:
+            "Whether to also upgrade the dws CLI tool (default: false). " +
+            "是否同时升级 dws CLI（默认 false）",
+          default: false,
         },
         force: {
           type: "boolean",
-          description: "是否强制重置到远程最新版本（丢弃本地修改，默认 false）",
+          description:
+            "Force reset to remote latest version, discarding local changes (default: false). " +
+            "强制重置到远程最新版本，丢弃本地修改（默认 false）",
+          default: false,
         },
       },
+      additionalProperties: false,
     },
-    // 自定义执行（不走 dws CLI）
     _customExecutor: true,
     async execute(args = {}) {
       const options = {
@@ -160,7 +176,12 @@ export default [
       // 检查脚本是否存在
       if (!existsSync(script)) {
         return {
-          content: [{ type: "text", text: `Error: 更新脚本不存在: ${script}\n请确保项目完整。` }],
+          content: [
+            {
+              type: "text",
+              text: `Error: Update script not found: ${script}\nPlease ensure the project is complete.`,
+            },
+          ],
           isError: true,
         };
       }
@@ -170,13 +191,22 @@ export default [
           cwd: PROJECT_ROOT,
           timeout: UPDATE_TIMEOUT_MS,
           maxBuffer: 5 * 1024 * 1024,
-          env: { ...process.env, FORCE_COLOR: "0" }, // 禁用颜色码，避免乱码
+          env: { ...process.env, FORCE_COLOR: "0" },
         });
 
         const output = (stdout || "").trim() + "\n" + (stderr || "").trim();
-        return { content: [{ type: "text", text: output.trim() }] };
+        const result = output.trim();
+
+        return {
+          content: [
+            {
+              type: "text",
+              text: result + "\n\n⚠️ Note: Please restart the MCP server to load the updated code.",
+            },
+          ],
+        };
       } catch (err) {
-        const parts = [`更新执行失败: ${err.message}`];
+        const parts = [`Update failed: ${err.message}`];
         if (err.stdout) parts.push(`stdout: ${err.stdout.trim()}`);
         if (err.stderr) parts.push(`stderr: ${err.stderr.trim()}`);
         return {

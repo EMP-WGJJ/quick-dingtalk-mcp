@@ -1,16 +1,23 @@
 #!/usr/bin/env bash
 # ═══════════════════════════════════════════════════════════════════════
-# quick-dingtalk-mcp 更新脚本 (macOS / Linux)
+# quick-dingtalk-mcp Update Script (macOS / Linux)
 #
-# 用法:
-#   bash scripts/update.sh
-#   或通过 MCP tool (dingtalk_self_update) 由 agent 调用
+# Usage:
+#   bash scripts/update.sh [options]
 #
-# 自动完成:
-#   1. 拉取远程最新代码（当前分支）
-#   2. 安装/更新项目依赖
-#   3. 升级 dws CLI（可选）
-#   4. 输出更新结果摘要
+# Options:
+#   --upgrade-dws   Also upgrade dws CLI
+#   --force         Force reset to remote latest (discard local changes)
+#   --json          Output result in JSON format (for MCP integration)
+#   -h, --help      Show help
+#
+# This script is called by the MCP tool (dingtalk_self_update) or can
+# be run manually. It performs:
+#   1. Record current version
+#   2. Pull latest code from remote
+#   3. Install/update npm dependencies
+#   4. Optionally upgrade dws CLI
+#   5. Output update summary
 # ═══════════════════════════════════════════════════════════════════════
 
 set -euo pipefail
@@ -30,21 +37,24 @@ info()  { echo -e "${CYAN}→ $1${NC}"; }
 # ─── 参数解析 ───────────────────────────────────────────────────────
 UPGRADE_DWS=false
 FORCE=false
+JSON_OUTPUT=false
 
 while [[ $# -gt 0 ]]; do
     case "$1" in
         --upgrade-dws) UPGRADE_DWS=true; shift ;;
         --force)       FORCE=true; shift ;;
+        --json)        JSON_OUTPUT=true; shift ;;
         -h|--help)
-            echo "用法: bash scripts/update.sh [选项]"
+            echo "Usage: bash scripts/update.sh [options]"
             echo ""
-            echo "选项:"
-            echo "  --upgrade-dws   同时升级 dws CLI"
-            echo "  --force         强制重置到远程最新（丢弃本地修改）"
-            echo "  -h, --help      显示帮助"
+            echo "Options:"
+            echo "  --upgrade-dws   Also upgrade dws CLI"
+            echo "  --force         Force reset to remote latest (discard local changes)"
+            echo "  --json          Output result in JSON format (for MCP integration)"
+            echo "  -h, --help      Show help"
             exit 0
             ;;
-        *) echo "未知参数: $1"; exit 1 ;;
+        *) echo "Unknown option: $1"; exit 1 ;;
     esac
 done
 
@@ -54,33 +64,33 @@ PROJECT_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
 cd "$PROJECT_DIR"
 
 echo ""
-info "quick-dingtalk-mcp 更新开始"
-echo "   项目路径: $PROJECT_DIR"
+info "quick-dingtalk-mcp update starting"
+echo "   Project path: $PROJECT_DIR"
 echo ""
 
 # ═══════════════════════════════════════════════════════════════════════
 # Step 1: 记录当前版本
 # ═══════════════════════════════════════════════════════════════════════
-info "Step 1: 检查当前状态"
+info "Step 1: Checking current state"
 
 CURRENT_BRANCH=$(git rev-parse --abbrev-ref HEAD 2>/dev/null || echo "unknown")
 CURRENT_COMMIT=$(git rev-parse --short HEAD 2>/dev/null || echo "unknown")
-echo "   当前分支: $CURRENT_BRANCH"
-echo "   当前提交: $CURRENT_COMMIT"
+echo "   Branch: $CURRENT_BRANCH"
+echo "   Commit: $CURRENT_COMMIT"
 
 # ═══════════════════════════════════════════════════════════════════════
 # Step 2: 拉取最新代码
 # ═══════════════════════════════════════════════════════════════════════
-info "Step 2: 拉取最新代码"
+info "Step 2: Pulling latest code"
 
 if [ "$FORCE" = true ]; then
-    warn "强制模式：重置到远程最新状态"
+    warn "Force mode: resetting to remote latest"
     git fetch origin
     git reset --hard "origin/$CURRENT_BRANCH"
 else
     # 检查是否有未提交的修改
     if ! git diff --quiet 2>/dev/null || ! git diff --cached --quiet 2>/dev/null; then
-        warn "检测到本地未提交的修改，暂存中..."
+        warn "Local uncommitted changes detected, stashing..."
         git stash push -m "auto-stash before update $(date +%Y%m%d-%H%M%S)"
         STASHED=true
     else
@@ -89,9 +99,9 @@ else
 
     # 拉取
     if git pull origin "$CURRENT_BRANCH" 2>/dev/null; then
-        ok "代码拉取成功"
+        ok "Code pulled successfully"
     else
-        err "代码拉取失败（可能有冲突），尝试 --force 参数"
+        err "Pull failed (possible conflict), try --force option"
         if [ "$STASHED" = true ]; then
             git stash pop 2>/dev/null || true
         fi
@@ -101,9 +111,9 @@ else
     # 恢复暂存
     if [ "$STASHED" = true ]; then
         if git stash pop 2>/dev/null; then
-            ok "本地修改已恢复"
+            ok "Local changes restored"
         else
-            warn "恢复暂存时有冲突，请手动处理: git stash pop"
+            warn "Conflict restoring stash, please resolve manually: git stash pop"
         fi
     fi
 fi
@@ -113,56 +123,82 @@ NEW_COMMIT=$(git rev-parse --short HEAD 2>/dev/null || echo "unknown")
 # ═══════════════════════════════════════════════════════════════════════
 # Step 3: 更新项目依赖
 # ═══════════════════════════════════════════════════════════════════════
-info "Step 3: 更新项目依赖"
+info "Step 3: Updating dependencies"
 
 if npm install 2>&1 | tail -3; then
-    ok "依赖更新完成"
+    ok "Dependencies updated"
 else
-    err "npm install 失败"
+    err "npm install failed"
     exit 1
 fi
 
 # ═══════════════════════════════════════════════════════════════════════
 # Step 4: 升级 dws（可选）
 # ═══════════════════════════════════════════════════════════════════════
+DWS_UPGRADED="skipped"
 if [ "$UPGRADE_DWS" = true ]; then
-    info "Step 4: 升级 dws CLI"
+    info "Step 4: Upgrading dws CLI"
 
     if command -v dws &>/dev/null; then
         DWS_VER_BEFORE=$(dws --version 2>&1 | head -1)
         if dws upgrade 2>/dev/null; then
             DWS_VER_AFTER=$(dws --version 2>&1 | head -1)
-            ok "dws 升级完成: $DWS_VER_BEFORE → $DWS_VER_AFTER"
+            ok "dws upgraded: $DWS_VER_BEFORE → $DWS_VER_AFTER"
+            DWS_UPGRADED="$DWS_VER_BEFORE → $DWS_VER_AFTER"
         else
-            warn "dws upgrade 失败，尝试 npm 方式..."
+            warn "dws upgrade failed, trying npm..."
             npm update -g dingtalk-workspace-cli 2>/dev/null || true
+            DWS_UPGRADED="fallback_npm"
         fi
     else
-        warn "dws 未安装，跳过升级"
+        warn "dws not installed, skipping upgrade"
+        DWS_UPGRADED="not_installed"
     fi
 fi
 
 # ═══════════════════════════════════════════════════════════════════════
 # 输出更新摘要
 # ═══════════════════════════════════════════════════════════════════════
+
+# JSON 输出模式（供 MCP tool 解析）
+if [ "$JSON_OUTPUT" = true ]; then
+    UPDATED="false"
+    if [ "$CURRENT_COMMIT" != "$NEW_COMMIT" ]; then
+        UPDATED="true"
+    fi
+    cat <<EOF
+{
+  "success": true,
+  "updated": $UPDATED,
+  "branch": "$CURRENT_BRANCH",
+  "previous_commit": "$CURRENT_COMMIT",
+  "current_commit": "$NEW_COMMIT",
+  "dws_upgraded": "$DWS_UPGRADED",
+  "restart_required": true
+}
+EOF
+    exit 0
+fi
+
+# 人类可读输出
 echo ""
 echo -e "${GREEN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
-echo -e "${GREEN}  ✅ 更新完成${NC}"
+echo -e "${GREEN}  ✅ Update complete${NC}"
 echo -e "${GREEN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
 echo ""
-echo "   分支:  $CURRENT_BRANCH"
-echo "   提交:  $CURRENT_COMMIT → $NEW_COMMIT"
+echo "   Branch:  $CURRENT_BRANCH"
+echo "   Commit:  $CURRENT_COMMIT → $NEW_COMMIT"
 
 if [ "$CURRENT_COMMIT" = "$NEW_COMMIT" ]; then
-    echo "   状态:  已是最新版本，无更新"
+    echo "   Status:  Already up-to-date, no changes"
 else
-    echo "   状态:  已更新到最新版本"
+    echo "   Status:  Updated to latest version"
     echo ""
-    echo "   更新内容:"
+    echo "   Changes:"
     git log --oneline "$CURRENT_COMMIT..$NEW_COMMIT" 2>/dev/null | head -10 | sed 's/^/     /'
 fi
 
 echo ""
-echo "   ⚠ 注意: MCP 服务需要重启才能加载新代码"
-echo "   重启方式: 在 MCP Host 中断开并重新连接"
+echo "   ⚠ Note: MCP server needs restart to load new code"
+echo "   Restart: Disconnect and reconnect in your MCP host"
 echo ""
