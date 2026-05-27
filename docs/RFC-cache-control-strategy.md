@@ -93,8 +93,6 @@ async function batchExecute(tool, inputArgs, batchConfig) {
 class ExecutionQueue {
   constructor(config) {
     this.maxConcurrency = config.maxConcurrency;       // 最大并发 dws 进程数
-    this.maxTotalBuffer = config.maxTotalBuffer;       // 所有进程的缓冲总量上限
-    this.currentBuffer = 0;
     this.running = 0;
     this.queue = [];
   }
@@ -119,7 +117,6 @@ class ExecutionQueue {
 ```javascript
 const CONCURRENCY_CONFIG = {
   maxConcurrency: 3,                    // 同时最多 3 个 dws 子进程
-  maxTotalBuffer: 200 * 1024 * 1024,    // 所有进程缓冲总量上限 200MB
   queueTimeout: 120_000,                // 排队超时 2 分钟
   priority: {                           // 优先级（高优先执行）
     'mail': 1,
@@ -313,7 +310,6 @@ const DEFAULT_CONFIG = {
   // 并发控制
   concurrency: {
     maxProcesses: 3,
-    maxTotalBuffer: 200 * 1024 * 1024,
     queueTimeout: 120_000,
   },
 
